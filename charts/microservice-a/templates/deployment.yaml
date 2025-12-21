@@ -1,1 +1,110 @@
-
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "microservice-a.fullname" . }}
+  labels:
+    {{- include "microservice-a.labels" . | nindent 4 }}
+  annotations:
+    # Anotaciones para Prometheus
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+    # Anotaciones para rollback
+    helm.sh/hook-weight: "-5"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "microservice-a.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.strategy.maxSurge }}
+      maxUnavailable: {{ .Values.strategy.maxUnavailable }}
+  minReadySeconds: {{ .Values.strategy.minReadySeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "microservice-a.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+      annotations:
+        # Anotaciones para Vault Agent Injector
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "microservice-a"
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/microservice-a/config"
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{`{{- with secret "secret/data/microservice-a/config" -}}
+          export DATABASE_URL="{{ .Data.data.database_url }}"
+          export SECRET_KEY="{{ .Data.data.secret_key }}"
+          export JWT_SECRET_KEY="{{ .Data.data.jwt_secret_key }}"
+          {{- end }}`}}
+        # Checksum de config para reiniciar pods cuando cambia la config
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "microservice-a.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: FLASK_ENV
+          value: {{ .Values.environment | quote }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        envFrom:
+        - configMapRef:
+            name: {{ include "microservice-a.fullname" . }}-config
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 30"]
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Volumen para secrets de Vault
+      volumes:
+      - name: vault-secrets
+        emptyDir:
+          medium: Memory
