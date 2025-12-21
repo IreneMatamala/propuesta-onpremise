@@ -1,1 +1,32 @@
-
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "microservice-a.fullname" . }}-config
+  labels:
+    {{- include "microservice-a.labels" . | nindent 4 }}
+data:
+  app-config.yaml: |
+    # Configuración de la aplicación
+    app:
+      name: {{ .Chart.Name }}
+      version: {{ .Chart.AppVersion }}
+      environment: {{ .Values.environment | quote }}
+    
+    # Configuración de logs
+    logging:
+      level: {{ .Values.logging.level | quote }}
+      format: json
+    
+    # Configuración de seguridad
+    security:
+      cors:
+        origins: {{ toJson .Values.security.cors.origins }}
+      rate_limiting:
+        enabled: {{ .Values.security.rate_limiting.enabled }}
+        default: {{ .Values.security.rate_limiting.default }}
+    
+    # Configuración de base de datos
+    database:
+      pool_size: {{ .Values.database.poolSize }}
+      pool_timeout: {{ .Values.database.poolTimeout }}
+      pool_recycle: {{ .Values.database.poolRecycle }}
