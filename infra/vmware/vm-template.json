@@ -1,1 +1,8 @@
-
+{
+  "vm_name": "k8s-node-${count.index}",
+  "cpus": 4,
+  "memory": 8192,
+  "disk_size": 50000,
+  "network": "VM Network",
+  "template": "ubuntu-22.04-template"
+}
