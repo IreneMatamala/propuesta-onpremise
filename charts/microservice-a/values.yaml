@@ -1,26 +1,56 @@
-# Valores por defecto para Microservicio A
+# Deployment Configuration
 replicaCount: 2
+revisionHistoryLimit: 10
+namespace: "microservice-a"
 
+# Image Configuration
 image:
-  repository: nexus.local:8082/microservice-a
-  tag: latest
-  pullPolicy: IfNotPresent
+  repository: "nexus.local:8082/microservice-a"
+  tag: "latest"
+  pullPolicy: "IfNotPresent"
 
-environment: production
+# Environment
+environment: "development"
 
+# Service Configuration
 service:
   type: ClusterIP
   port: 8000
+  containerPort: 8000
 
-ingress:
-  enabled: true
-  className: nginx
-  host: microservice-a.example.com
-  annotations: {}
-  tls:
-    enabled: true
-    secretName: microservice-a-tls
+# Strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+  minReadySeconds: 30
 
+# Probes Configuration
+probes:
+  liveness:
+    path: "/health"
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readiness:
+    path: "/health"
+    initialDelaySeconds: 10
+    periodSeconds: 5
+  startup:
+    path: "/health"
+    initialDelaySeconds: 5
+    failureThreshold: 30
+
+# Database Configuration
+database:
+  host: "postgresql-primary"
+  port: 5432
+  name: "microservice_a"
+  user: "app_user"
+  poolSize: 10
+  poolTimeout: 30
+
+# Resources
 resources:
   requests:
     memory: "256Mi"
@@ -29,54 +59,47 @@ resources:
     memory: "512Mi"
     cpu: "200m"
 
-strategy:
-  type: RollingUpdate
-  maxSurge: 25%
-  maxUnavailable: 25%
-  minReadySeconds: 30
-
+# Security Context
 securityContext:
   runAsUser: 1000
+  runAsGroup: 1000
   runAsNonRoot: true
-  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
   capabilities:
     drop:
     - ALL
-  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
 
+# Pod Security Context
 podSecurityContext:
   fsGroup: 1000
   runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
 
-logging:
-  level: INFO
+# Volumes
+volumes:
+  tmp:
+    sizeLimit: "100Mi"
 
-database:
-  url: "postgresql://user:pass@postgresql-primary:5432/microservice_a"
-  poolSize: 10
-  poolTimeout: 30
-  poolRecycle: 3600
-
-security:
-  cors:
-    origins:
-      - "https://microservice-a.example.com"
-  rate_limiting:
-    enabled: true
-    default: "100 per minute"
-
-secrets:
-  managedBy: external-secrets
-  vaultPath: "kv/microservice-a/production"
-  
+# External Secrets Configuration
 externalSecrets:
   enabled: false
-  vault:
-    address: "http://vault.vault.svc.cluster.local:8200"
-    path: "secret/data/microservice-a"
+  # Cuando sea true, crear un Secret manualmente:
+  # kubectl create secret generic microservice-a-secrets \
+  #   --from-literal=db_password='your-password' \
+  #   --from-literal=secret_key='your-secret-key'
+  secretName: "microservice-a-secrets"
 
-nodeSelector: {}
+# Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
 
+# Affinity - Anti-affinity para alta disponibilidad
 affinity:
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
@@ -84,20 +107,34 @@ affinity:
       podAffinityTerm:
         labelSelector:
           matchExpressions:
-          - key: app.kubernetes.io/name
+          - key: app
             operator: In
             values:
             - microservice-a
         topologyKey: kubernetes.io/hostname
 
-tolerations: []
+# Init Containers
+initContainers:
+  enabled: false
+  image: "busybox"
+  tag: "latest"
 
-pdb:
-  minAvailable: "50%"
+# Logging
+logging:
+  level: "INFO"
+  format: "json"
+  output: "stdout"
 
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 4
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
+# Features
+features:
+  cacheEnabled: false
+  rateLimitEnabled: true
+  corsEnabled: true
+
+# Pod Configuration
+terminationGracePeriodSeconds: 60
+automountServiceAccountToken: false
+
+# Service Mesh (Linkerd/Istio)
+linkerd:
+  inject: "disabled"
