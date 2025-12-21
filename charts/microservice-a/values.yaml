@@ -66,9 +66,9 @@ security:
     default: "100 per minute"
 
 secrets:
-  secretKey: "change-me-in-production"
-  jwtSecretKey: "change-me-in-production"
-
+  managedBy: external-secrets
+  vaultPath: "kv/microservice-a/production"
+  
 externalSecrets:
   enabled: false
   vault:
