@@ -1,1 +1,17 @@
 
+stages:
+  - build
+  - test
+  - deploy
+build:
+  stage: build
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - trivy image --exit-code 1 $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+deploy-dev:
+  stage: deploy
+  script:
+    - helm upgrade --install microservice-a charts/microservice-a/ -f values-dev.yaml
+  only:
+    - develop
