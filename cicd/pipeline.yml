@@ -1,60 +1,64 @@
 stages:
   - build
   - scan
-  - test
   - deploy
   - notify
 
 variables:
   IMAGE_NAME: registry.local/backend
-  KUBE_NAMESPACE: dev   # luego se controla por rama
   HELM_RELEASE: backend
 
-# ---------------- BUILD ----------------
+# ---------- BUILD ----------
 build:
   stage: build
   script:
     - docker build -t $IMAGE_NAME:$CI_COMMIT_SHA services/backend
     - docker push $IMAGE_NAME:$CI_COMMIT_SHA
 
-# ---------------- SECURITY SCAN ----------------
-trivy_scan:
+# ---------- SECURITY SCAN ----------
+trivy:
   stage: scan
   script:
     - trivy image --exit-code 1 $IMAGE_NAME:$CI_COMMIT_SHA
-  allow_failure: false
 
-# ---------------- CODE QUALITY ----------------
 sonarqube:
   stage: scan
   script:
     - sonar-scanner
-  allow_failure: false
 
-# ---------------- DEPLOY ----------------
-deploy:
+# ---------- DEPLOY DEV ----------
+deploy_dev:
   stage: deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
   script:
     - helm upgrade --install $HELM_RELEASE platform/helm/backend \
-        --namespace $KUBE_NAMESPACE \
-        --create-namespace \
-        --set image.repository=$IMAGE_NAME \
-        --set image.tag=$CI_COMMIT_SHA
-  when: on_success
+      --namespace dev --create-namespace \
+      --set image.tag=$CI_COMMIT_SHA
 
-# ---------------- ROLLBACK ----------------
+# ---------- DEPLOY PROD (MANUAL) ----------
+deploy_prod:
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  when: manual
+  script:
+    - helm upgrade --install $HELM_RELEASE platform/helm/backend \
+      --namespace prod --create-namespace \
+      --set image.tag=$CI_COMMIT_SHA
+
+# ---------- ROLLBACK ----------
 rollback:
   stage: deploy
+  when: on_failure
   script:
     - helm rollback $HELM_RELEASE
-  when: on_failure
 
-# ---------------- NOTIFY ----------------
+# ---------- NOTIFY ----------
 notify_failure:
   stage: notify
-  script:
-    - |
-      curl -H "Content-Type: application/json" \
-      -d "{\"text\":\"❌ Deploy fallido en $KUBE_NAMESPACE. Rollback ejecutado.\"}" \
-      $TEAMS_WEBHOOK_URL
   when: on_failure
+  script: |
+    curl -H "Content-Type: application/json" \
+    -d "{\"text\":\"❌ Deploy fallido. Rollback ejecutado.\"}" \
+    $TEAMS_WEBHOOK_URL
