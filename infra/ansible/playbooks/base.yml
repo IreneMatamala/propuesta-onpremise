@@ -1,0 +1,7 @@
+- hosts: k8s
+  become: true
+  tasks:
+    - name: Update system
+      apt:
+        update_cache: yes
+        upgrade: dist
