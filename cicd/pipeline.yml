@@ -2,6 +2,7 @@ stages:
   - build
   - scan
   - deploy
+  - security
   - notify
 
 variables:
@@ -15,7 +16,7 @@ build:
     - docker build -t $IMAGE_NAME:$CI_COMMIT_SHA services/backend
     - docker push $IMAGE_NAME:$CI_COMMIT_SHA
 
-# ---------- SECURITY SCAN ----------
+# ---------- SCANS ----------
 trivy:
   stage: scan
   script:
@@ -32,24 +33,26 @@ deploy_dev:
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
   script:
+    - kubectl apply -f platform/kubernetes/network-policies/
     - helm upgrade --install $HELM_RELEASE platform/helm/backend \
-      --namespace dev --create-namespace \
-      --set image.tag=$CI_COMMIT_SHA
+        --namespace dev --create-namespace \
+        --set image.tag=$CI_COMMIT_SHA
 
-# ---------- DEPLOY PROD (MANUAL) ----------
+# ---------- DEPLOY PROD ----------
 deploy_prod:
   stage: deploy
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   when: manual
   script:
+    - kubectl apply -f platform/kubernetes/network-policies/
     - helm upgrade --install $HELM_RELEASE platform/helm/backend \
-      --namespace prod --create-namespace \
-      --set image.tag=$CI_COMMIT_SHA
+        --namespace prod --create-namespace \
+        --set image.tag=$CI_COMMIT_SHA
 
 # ---------- ROLLBACK ----------
 rollback:
-  stage: deploy
+  stage: security
   when: on_failure
   script:
     - helm rollback $HELM_RELEASE
@@ -60,5 +63,5 @@ notify_failure:
   when: on_failure
   script: |
     curl -H "Content-Type: application/json" \
-    -d "{\"text\":\"❌ Deploy fallido. Rollback ejecutado.\"}" \
+    -d "{\"text\":\" Deploy fallido. Rollback ejecutado. Revisa NetworkPolicies.\"}" \
     $TEAMS_WEBHOOK_URL
