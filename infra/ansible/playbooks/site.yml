@@ -1,7 +1,18 @@
-- hosts: k8s
+
+- hosts: masters:workers
   become: true
   roles:
     - base
     - hardening
     - docker
     - kubernetes
+
+- hosts: loadbalancer
+  become: true
+  roles:
+    - nginx-ingress
+
+- hosts: monitoring
+  become: true
+  roles:
+    - monitoring
