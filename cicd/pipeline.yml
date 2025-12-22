@@ -1,0 +1,31 @@
+stages:
+  - build
+  - scan
+  - test
+  - deploy
+
+build:
+  script:
+    - docker build -t backend:$CI_COMMIT_SHA services/backend
+
+trivy_scan:
+  script:
+    - trivy image backend:$CI_COMMIT_SHA
+  allow_failure: false
+
+sonarqube:
+  script:
+    - sonar-scanner
+  allow_failure: false
+
+deploy_dev:
+  script:
+    - helm upgrade --install backend platform/helm/backend \
+      -f environments/dev/backend-values.yaml \
+      --namespace dev
+  when: on_success
+
+rollback_on_failure:
+  script:
+    - helm rollback backend
+  when: on_failure
