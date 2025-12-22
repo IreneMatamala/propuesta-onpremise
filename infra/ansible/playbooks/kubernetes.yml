@@ -1,0 +1,10 @@
+- hosts: k8s
+  become: true
+  tasks:
+    - name: Install kube packages
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
