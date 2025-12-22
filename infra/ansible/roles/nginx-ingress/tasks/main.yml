@@ -1,0 +1,26 @@
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Install required packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - curl
+    - gnupg
+
+- name: Configure Nginx Ingress
+  template:
+    src: nginx-ingress.conf.j2
+    dest: /etc/nginx/nginx.conf
+  notify:
+    - restart nginx
+
+- name: Enable and start Nginx
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes
