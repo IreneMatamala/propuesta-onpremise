@@ -3,29 +3,58 @@ stages:
   - scan
   - test
   - deploy
+  - notify
 
+variables:
+  IMAGE_NAME: registry.local/backend
+  KUBE_NAMESPACE: dev   # luego se controla por rama
+  HELM_RELEASE: backend
+
+# ---------------- BUILD ----------------
 build:
+  stage: build
   script:
-    - docker build -t backend:$CI_COMMIT_SHA services/backend
+    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHA services/backend
+    - docker push $IMAGE_NAME:$CI_COMMIT_SHA
 
+# ---------------- SECURITY SCAN ----------------
 trivy_scan:
+  stage: scan
   script:
-    - trivy image backend:$CI_COMMIT_SHA
+    - trivy image --exit-code 1 $IMAGE_NAME:$CI_COMMIT_SHA
   allow_failure: false
 
+# ---------------- CODE QUALITY ----------------
 sonarqube:
+  stage: scan
   script:
     - sonar-scanner
   allow_failure: false
 
-deploy_dev:
+# ---------------- DEPLOY ----------------
+deploy:
+  stage: deploy
   script:
-    - helm upgrade --install backend platform/helm/backend \
-      -f environments/dev/backend-values.yaml \
-      --namespace dev
+    - helm upgrade --install $HELM_RELEASE platform/helm/backend \
+        --namespace $KUBE_NAMESPACE \
+        --create-namespace \
+        --set image.repository=$IMAGE_NAME \
+        --set image.tag=$CI_COMMIT_SHA
   when: on_success
 
-rollback_on_failure:
+# ---------------- ROLLBACK ----------------
+rollback:
+  stage: deploy
   script:
-    - helm rollback backend
+    - helm rollback $HELM_RELEASE
+  when: on_failure
+
+# ---------------- NOTIFY ----------------
+notify_failure:
+  stage: notify
+  script:
+    - |
+      curl -H "Content-Type: application/json" \
+      -d "{\"text\":\"❌ Deploy fallido en $KUBE_NAMESPACE. Rollback ejecutado.\"}" \
+      $TEAMS_WEBHOOK_URL
   when: on_failure
