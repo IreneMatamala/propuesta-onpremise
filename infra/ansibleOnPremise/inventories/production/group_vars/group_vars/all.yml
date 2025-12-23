@@ -1,0 +1,9 @@
+---
+# Configuración de red interna
+internal_domain: "k8s.local"
+dns_servers:
+  - "10.0.0.1"
+  - "8.8.8.8"
+
+# Proxy si existe (para descargas)
+# http_proxy: "http://proxy.internal:3128"
