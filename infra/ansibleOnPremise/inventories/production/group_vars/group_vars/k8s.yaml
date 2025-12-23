@@ -1,0 +1,7 @@
+# Versiones de Kubernetes
+kube_version: "1.28"
+docker_version: "20.10"
+# Configuración del clúster
+cluster_name: "onprem-k8s"
+service_cidr: "10.96.0.0/12"
+pod_network_cidr: "10.244.0.0/16"
