@@ -1,0 +1,8 @@
+
+---
+- name: Abrir puertos específicos por grupo
+  ufw:
+    port: "{{ item }}"
+    proto: tcp
+    state: enabled
+  loop: "{{ firewall_ports[inventory_hostname_in_groups.keys() | intersect(groups.keys()) | list | first] | default([]) }}"
