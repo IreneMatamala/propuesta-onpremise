@@ -1,0 +1,3 @@
+kube_role: "node"
+kubelet_register_node: true
+node_labels: "node-role.kubernetes.io/worker=true"
