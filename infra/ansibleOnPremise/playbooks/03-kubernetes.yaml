@@ -1,0 +1,16 @@
+---
+- name: "Configurar masters de Kubernetes"
+  hosts: masters
+  become: yes
+  roles:
+    - role: kubernetes
+      kube_role: master
+  tags: k8s-master
+
+- name: "Configurar workers de Kubernetes"
+  hosts: workers
+  become: yes
+  roles:
+    - role: kubernetes
+      kube_role: node
+  tags: k8s-worker
