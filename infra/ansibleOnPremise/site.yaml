@@ -1,0 +1,14 @@
+- name: "Fase 1: Hardening inicial de todos los nodos"
+  import_playbook: playbooks/01-hardening.yaml
+
+- name: "Fase 2: Instalación de Docker en todos los nodos de Kubernetes"
+  import_playbook: playbooks/02-docker.yaml
+
+- name: "Fase 3: Configuración del clúster Kubernetes"
+  import_playbook: playbooks/03-kubernetes.yaml
+
+- name: "Fase 4: Configuración del Load Balancer para API Server"
+  import_playbook: playbooks/04-loadbalancer.yaml
+
+- name: "Fase 5: Despliegue del stack de Monitoring"
+  import_playbook: playbooks/05-monitoring.yaml
