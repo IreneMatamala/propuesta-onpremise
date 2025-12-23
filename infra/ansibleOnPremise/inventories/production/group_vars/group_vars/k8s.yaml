@@ -1,22 +1,38 @@
----
-# Versiones específicas
-kube_version: "1.28.0"
-docker_version: "20.10"
 
-# Configuración del clúster
-cluster_name: "onprem-production"
+# ======================
+# Component Versions
+# ======================
+kube_version: "1.28.0"
+kube_cni_version: "1.3.0"
+docker_version: "20.10"
+network_plugin: "calico"
+network_plugin_version: "v3.26.0"
+
+# ======================
+# Cluster Configuration
+# ======================
+cluster_name: "onprem-ha-cluster"
+cluster_domain: "cluster.local"
 service_cidr: "10.96.0.0/12"
 pod_cidr: "10.244.0.0/16"
+cluster_dns: "10.96.0.10"
 
-# Container runtime
+# ======================
+# Container Runtime
+# ======================
 container_runtime: "docker"
 cri_socket: "/var/run/dockershim.sock"
 
-# Configuración de kubeadm
-kubeadm_token: "{{ vault_kubeadm_token }}"
-
-# Configuracion Api
-kube_api_endpoint: "https://10.0.0.20:6443"  # lb-0
+# ======================
+# API & kubeadm Configuration
+# ======================
+kube_api_endpoint: "https://10.0.0.20:6443"  # Load balancer endpoint
 kube_api_cert_sans:
-  - "10.0.0.20"
-  - "k8s-api.local.lan"
+  - "10.0.0.20"          # Load balancer IP
+  - "k8s-api.local.lan"  # DNS name
+kubeadm_token: "{{ vault_kubeadm_token }}"  # From vault
+
+# ======================
+# Kubelet Configuration
+# ======================
+kubelet_max_pods: 110
