@@ -14,3 +14,9 @@ cri_socket: "/var/run/dockershim.sock"
 
 # Configuración de kubeadm
 kubeadm_token: "{{ vault_kubeadm_token }}"
+
+# Configuracion Api
+kube_api_endpoint: "https://10.0.0.20:6443"  # lb-0
+kube_api_cert_sans:
+  - "10.0.0.20"
+  - "k8s-api.local.lan"
