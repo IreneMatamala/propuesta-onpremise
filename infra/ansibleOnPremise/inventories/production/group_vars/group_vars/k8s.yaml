@@ -1,7 +1,16 @@
-# Versiones de Kubernetes
-kube_version: "1.28"
+---
+# Versiones específicas
+kube_version: "1.28.0"
 docker_version: "20.10"
+
 # Configuración del clúster
-cluster_name: "onprem-k8s"
+cluster_name: "onprem-production"
 service_cidr: "10.96.0.0/12"
-pod_network_cidr: "10.244.0.0/16"
+pod_cidr: "10.244.0.0/16"
+
+# Container runtime
+container_runtime: "docker"
+cri_socket: "/var/run/dockershim.sock"
+
+# Configuración de kubeadm
+kubeadm_token: "{{ vault_kubeadm_token }}"
