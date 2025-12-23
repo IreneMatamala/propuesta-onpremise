@@ -1,0 +1,27 @@
+---
+- name: Inicializar cluster con kubeadm
+  template:
+    src: kubeadm-config.yaml.j2
+    dest: /tmp/kubeadm-config.yaml
+
+- name: Ejecutar kubeadm init
+  command: kubeadm init --config=/tmp/kubeadm-config.yaml --upload-certs
+  register: kubeadm_init
+  when: inventory_hostname == "k8s-master-0"  # Solo el primer master
+
+- name: Unir otros masters al cluster
+  command: |
+    kubeadm join {{ kube_api_endpoint }} \
+      --token {{ kubeadm_token }} \
+      --discovery-token-ca-cert-hash sha256:{{ kubeadm_ca_hash }} \
+      --control-plane \
+      --certificate-key {{ kubeadm_cert_key }}
+  when: inventory_hostname != "k8s-master-0"
+
+- name: Configurar kubeconfig para usuario ubuntu
+  copy:
+    dest: /home/ubuntu/.kube/config
+    content: "{{ kubeconfig_admin.stdout }}"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
