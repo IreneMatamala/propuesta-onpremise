@@ -27,3 +27,30 @@ firewall_ports:
     - 3000   # Grafana
     - 9093   # Alertmanager
     - 9100   # node-exporter (self)
+
+
+# Configuración de conexión SSH
+ansible_user: ubuntu
+ansible_ssh_private_key_file: ~/.ssh/id_rsa
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# Configuración de become (sudo)
+ansible_become: true
+ansible_become_method: sudo
+ansible_become_user: root
+
+# Configuración de rendimiento
+ansible_pipelining: true
+ansible_timeout: 30
+ansible_connection: ssh
+
+# Configuración específica de Python
+ansible_python_interpreter: /usr/bin/python3
+
+# Variables comunes de sistema
+timezone: UTC
+locale: en_US.UTF-8
+
+
+# Configuración de logs
+log_retention_days: 30
