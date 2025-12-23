@@ -5,5 +5,25 @@ dns_servers:
   - "10.0.0.1"
   - "8.8.8.8"
 
-# Proxy si existe (para descargas)
-# http_proxy: "http://proxy.internal:3128"
+firewall_ports:
+  masters:
+    - 6443   # Kubernetes API
+    - 2379   # etcd
+    - 2380   # etcd peer
+    - 10250  # Kubelet API
+    - 10259  # kube-scheduler
+    - 10257  # kube-controller-manager
+    - 9100   # node-exporter (monitoring)
+  workers:
+    - 10250  # Kubelet API
+    - 30000  # NodePort services
+    - 9100   # node-exporter
+  loadbalancer:
+    - 6443   # Kubernetes API (LB)
+    - 80     # HTTP
+    - 443    # HTTPS
+  monitoring:
+    - 9090   # Prometheus
+    - 3000   # Grafana
+    - 9093   # Alertmanager
+    - 9100   # node-exporter (self)
