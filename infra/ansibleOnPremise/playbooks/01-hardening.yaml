@@ -1,0 +1,7 @@
+---
+- name: "Aplicar hardening de seguridad a todos los nodos"
+  hosts: all
+  become: yes
+  roles:
+    - role: hardening
+      tags: hardening
