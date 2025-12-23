@@ -1,0 +1,26 @@
+
+---
+- name: Instalar Nginx
+  apt:
+    name: nginx
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Configurar upstream para Kubernetes API
+  template:
+    src: kubernetes-upstream.conf.j2
+    dest: /etc/nginx/conf.d/kubernetes.conf
+  notify: restart nginx
+
+- name: Configurar balanceo de carga
+  template:
+    src: nginx-loadbalancer.conf.j2
+    dest: /etc/nginx/sites-available/kubernetes-lb
+  notify: restart nginx
+
+- name: Habilitar sitio
+  file:
+    src: /etc/nginx/sites-available/kubernetes-lb
+    dest: /etc/nginx/sites-enabled/kubernetes-lb
+    state: link
+  notify: restart nginx
