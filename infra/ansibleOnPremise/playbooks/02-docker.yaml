@@ -1,0 +1,7 @@
+---
+- name: "Instalar y configurar Docker en nodos de Kubernetes"
+  hosts: k8s
+  become: yes
+  roles:
+    - role: docker
+      tags: docker
