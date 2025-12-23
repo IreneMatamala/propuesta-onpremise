@@ -1,0 +1,14 @@
+---
+- name: "Desplegar stack de monitoring en nodo designado"
+  hosts: monitoring
+  become: yes
+  roles:
+    - role: monitoring
+      prometheus_targets:
+        masters:
+          - "10.0.0.10:9100"
+          - "10.0.0.11:9100"
+        workers:
+          - "10.0.0.12:9100"
+          - "10.0.0.13:9100"
+  tags: monitoring
