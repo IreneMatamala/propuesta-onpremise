@@ -1,0 +1,10 @@
+---
+- name: "Configurar Nginx como Load Balancer para API Server de Kubernetes"
+  hosts: loadbalancer
+  become: yes
+  roles:
+    - role: nginx
+      lb_backend_servers:
+        - "10.0.0.10:6443"
+        - "10.0.0.11:6443"
+  tags: loadbalancer
