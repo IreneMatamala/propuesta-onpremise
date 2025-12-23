@@ -1,0 +1,14 @@
+---
+- name: Incluir variables específicas
+  include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Ejecutar tareas comunes
+  include_tasks: common.yml
+
+- name: Configurar master nodes
+  include_tasks: master.yml
+  when: kube_role == "master"
+
+- name: Configurar worker nodes
+  include_tasks: worker.yml
+  when: kube_role == "node"
