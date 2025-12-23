@@ -1,0 +1,55 @@
+# playbooks/deploy-full.yaml
+---
+- name: "🚀 DESPLIEGUE AUTOMÁTICO COMPLETO"
+  hosts: all
+  gather_facts: yes
+  serial: 1  # Ejecuta nodo por nodo para evitar race conditions
+  
+  pre_tasks:
+    - name: Validar inventario
+      fail:
+        msg: "Falta variable crítica: {{ item }}"
+      when: item not in hostvars[inventory_hostname]
+      loop:
+        - "ansible_host"
+        - "kube_role"
+
+  roles:
+    - role: hardening
+      tags: [always, hardening]
+
+- name: "🐳 INSTALAR DOCKER EN K8S NODOS"
+  hosts: k8s
+  serial: "30%"  # Ejecuta en batches del 30%
+  roles:
+    - role: docker
+      tags: docker
+
+- name: "⚙️ CONFIGURAR KUBERNETES"
+  hosts: k8s
+  serial: "1"  # Masters primero, luego workers
+  order: sorted
+  roles:
+    - role: kubernetes
+      tags: kubernetes
+
+- name: "🔀 CONFIGURAR LOAD BALANCER"
+  hosts: loadbalancer
+  roles:
+    - role: nginx
+      tags: loadbalancer
+
+- name: "📊 DESPLEGAR MONITORING"
+  hosts: monitoring
+  roles:
+    - role: monitoring
+      tags: monitoring
+
+  post_tasks:
+    - name: Verificar cluster
+      uri:
+        url: "https://{{ kube_api_endpoint }}/healthz"
+        validate_certs: no
+        status_code: 200
+      delegate_to: localhost
+      run_once: yes
