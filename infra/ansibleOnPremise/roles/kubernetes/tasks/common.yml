@@ -1,0 +1,25 @@
+---
+- name: Instalar kubeadm, kubelet y kubectl
+  apt:
+    name:
+      - kubelet={{ kube_version }}-00
+      - kubeadm={{ kube_version }}-00
+      - kubectl={{ kube_version }}-00
+    state: present
+    update_cache: yes
+
+- name: Deshabilitar swap
+  shell: |
+    swapoff -a
+    sed -i '/ swap / s/^/#/' /etc/fstab
+
+- name: Configurar sysctl
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - {key: 'net.bridge.bridge-nf-call-iptables', value: '1'}
+    - {key: 'net.bridge.bridge-nf-call-ip6tables', value: '1'}
+    - {key: 'net.ipv4.ip_forward', value: '1'}
