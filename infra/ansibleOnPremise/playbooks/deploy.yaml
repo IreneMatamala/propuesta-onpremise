@@ -1,55 +1,254 @@
-# playbooks/deploy-full.yaml
----
-- name: "🚀 DESPLIEGUE AUTOMÁTICO COMPLETO"
+- name: "DESPLIEGUE ON-PREMISE"
   hosts: all
   gather_facts: yes
   serial: 1  # Ejecuta nodo por nodo para evitar race conditions
   
   pre_tasks:
-    - name: Validar inventario
+    - name: "Validar inventarios"
       fail:
-        msg: "Falta variable crítica: {{ item }}"
-      when: item not in hostvars[inventory_hostname]
+        msg: "Falta variable crítica: {{ item }} en {{ inventory_hostname }}"
+      when: >
+        (item == 'ansible_host' and hostvars[inventory_hostname].ansible_host is undefined) or
+        (item == 'kube_role' and inventory_hostname in groups.get('k8s', []) 
+         and hostvars[inventory_hostname].kube_role is undefined)
       loop:
         - "ansible_host"
         - "kube_role"
+      run_once: yes
+      delegate_to: localhost
+
+    - name: "Mostrar resumen del despliegue"
+      debug:
+        msg: |
+          Masters: {{ groups.masters | length }} nodos
+          Workers: {{ groups.workers | length }} nodos  
+          Load Balancer: {{ groups.loadbalancer | length }} nodos
+          Monitoring: {{ groups.monitoring | length }} nodos
+         
+      run_once: yes
+      delegate_to: localhost
 
   roles:
     - role: hardening
-      tags: [always, hardening]
+      tags: [always, hardening, fase1]
 
-- name: "🐳 INSTALAR DOCKER EN K8S NODOS"
+- name: "FASE 2: INSTALAR DOCKER EN NODOS"
   hosts: k8s
   serial: "30%"  # Ejecuta en batches del 30%
+  
+  vars:
+    docker_users:
+      - "ubuntu"
+      - "kube"
+  
   roles:
     - role: docker
-      tags: docker
+      tags: [docker, fase2]
+  
+  post_tasks:
+    - name: "Verificar instalación de Docker"
+      command: "docker --version"
+      register: docker_version
+      changed_when: false
+      
+    - name: "Docker instalado"
+      debug:
+        msg: "Docker {{ docker_version.stdout }} instalado en {{ inventory_hostname }}"
 
-- name: "⚙️ CONFIGURAR KUBERNETES"
-  hosts: k8s
-  serial: "1"  # Masters primero, luego workers
+- name: "FASE 3: CONFIGURAR KUBERNETES - MASTERS"
+  hosts: masters
+  serial: 1 
   order: sorted
+  
+  vars:
+    kube_role: "master"
+    # El primer master inicializa, los demás se unen
+    kube_initializer: "{{ 'true' if inventory_hostname == 'k8s-master-0' else 'false' }}"
+    kube_join_token: "{{ vault_kubeadm_token if vault_kubeadm_token is defined else 'default.token.here' }}"
+  
   roles:
     - role: kubernetes
-      tags: kubernetes
+      tags: [kubernetes, fase3, k8s-master]
+  
+  post_tasks:
+    - name: "Esperar 15 segundos entre masters"
+      pause:
+        seconds: 15
+      when: inventory_hostname != 'k8s-master-0'
 
-- name: "🔀 CONFIGURAR LOAD BALANCER"
+- name: "UNIR WORKERS AL CLÚSTER"
+  hosts: workers
+  serial: "50%"  # Workers en paralelo (50% a la vez)
+  
+  vars:
+    kube_role: "node"
+    kube_api_endpoint: "https://10.0.0.20:6443"  # IP del load balancer
+  
+  roles:
+    - role: kubernetes
+      tags: [kubernetes, fase3, k8s-worker]
+  
+  post_tasks:
+    - name: "Verificar que el worker puede contactar al API Server"
+      wait_for:
+        host: "10.0.0.20"
+        port: 6443
+        timeout: 30
+      delegate_to: localhost
+
+- name: "FASE 4: CONFIGURAR LOAD BALANCERS"
   hosts: loadbalancer
+  serial: 1
+  
+  vars:
+    nginx_mode: "stream"  # Para balancear tráfico TCP (Kubernetes API)
+    upstream_servers:
+      - "10.0.0.10:6443"  # k8s-master-0
+      - "10.0.0.11:6443"  # k8s-master-1
+    virtual_ip: "10.0.0.20"  # IP del load balancer
+    load_balancing_method: "least_conn"
+  
   roles:
     - role: nginx
-      tags: loadbalancer
-
-- name: "📊 DESPLEGAR MONITORING"
-  hosts: monitoring
-  roles:
-    - role: monitoring
-      tags: monitoring
-
+      tags: [loadbalancer, fase4, ha]
+  
   post_tasks:
-    - name: Verificar cluster
+    - name: "Verificar que nginx está balanceando"
       uri:
-        url: "https://{{ kube_api_endpoint }}/healthz"
+        url: "https://{{ virtual_ip }}:6443/healthz"
         validate_certs: no
         status_code: 200
+        timeout: 5
+      register: lb_check
+      until: lb_check.status == 200
+      retries: 10
+      delay: 3
       delegate_to: localhost
-      run_once: yes
+    
+    - name: "Mostrar estado del load balancer"
+      debug:
+        msg: "Load balancer configurado en {{ virtual_ip }}:6443 balanceando {{ upstream_servers | length }} masters"
+
+- name: "FASE 5: DESPLEGAR MONITORING"
+  hosts: monitoring
+  serial: 1
+  
+  vars:
+    monitoring_components:
+      prometheus:
+        enabled: true
+        port: 9090
+      grafana:
+        enabled: true  
+        port: 3000
+        admin_password: "{{ vault_grafana_password | default('admin') }}"
+      node_exporter:
+        enabled: true
+        port: 9100
+      alertmanager:
+        enabled: true
+        port: 9093
+    
+    # Puertos a abrir en firewall
+    monitoring_ports:
+      - 9090  # Prometheus
+      - 3000  # Grafana
+      - 9100  # Node exporter
+      - 9093  # Alertmanager
+    
+    # Configuración de descubrimiento para Prometheus
+    prometheus_targets:
+      kubernetes:
+        - "10.0.0.10:10250"  # kubelet master-0
+        - "10.0.0.11:10250"  # kubelet master-1
+        - "10.0.0.12:10250"  # kubelet worker-0
+        - "10.0.0.13:10250"  # kubelet worker-1
+      node_exporter:
+        - "10.0.0.10:9100"
+        - "10.0.0.11:9100"
+        - "10.0.0.12:9100"
+        - "10.0.0.13:9100"
+        - "10.0.0.20:9100"  # lb-0
+        - "10.0.0.30:9100"  # monitor-0 (self)
+  
+  roles:
+    - role: monitoring
+      tags: [monitoring, fase5]
+  
+  post_tasks:
+    - name: "Configurar reglas de firewall para monitoreo"
+      ufw:
+        port: "{{ item }}"
+        proto: tcp
+        state: enabled
+      loop: "{{ monitoring_ports }}"
+      when: ansible_os_family == "Debian"
+    
+    - name: "Verificar que Prometheus está recogiendo métricas"
+      uri:
+        url: "http://localhost:9090/api/v1/targets"
+        return_content: yes
+      register: prometheus_targets
+      until: prometheus_targets.json.data.activeTargets | length >= 4
+      retries: 15
+      delay: 5
+    
+    - name: "Mostrar URL de acceso a Grafana"
+      debug:
+        msg: |
+          MONITORING DESPLEGADO
+          ========================
+          Grafana: http://{{ ansible_host }}:3000
+          Usuario: admin
+          Contraseña: {{ vault_grafana_password | default('admin') }}
+          
+          Prometheus: http://{{ ansible_host }}:9090
+          Alertmanager: http://{{ ansible_host }}:9093
+          
+          Métricas detectadas: {{ prometheus_targets.json.data.activeTargets | length }} targets
+
+- name: " VERIFICACIONES FINALES Y POST-DEPLOY"
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  tasks:
+    - name: "Esperar 30 segundos para que todo se estabilice"
+      pause:
+        seconds: 30
+      
+    - name: "Verificar salud del cluster Kubernetes"
+      uri:
+        url: "https://10.0.0.20:6443/healthz"
+        validate_certs: no
+        status_code: 200
+        timeout: 10
+      register: cluster_health
+      until: cluster_health.status == 200
+      retries: 15
+      delay: 5
+    
+    - name: "Obtener estado de los nodos del cluster"
+      uri:
+        url: "https://10.0.0.20:6443/api/v1/nodes"
+        validate_certs: no
+        method: GET
+        force_basic_auth: yes
+        user: "admin"
+        password: "{{ vault_k8s_admin_password | default('password') }}"
+        status_code: 200
+      register: k8s_nodes
+      
+    - name: "Verificar que todos los nodos están Ready"
+      assert:
+        that:
+          - k8s_nodes.json.items | length == (groups.masters | length + groups.workers | length)
+          - k8s_nodes.json.items | selectattr('status.conditions') | map(attribute='status.conditions') | flatten | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length == (groups.masters | length + groups.workers | length)
+        msg: "No todos los nodos del cluster están en estado Ready"
+    
+    - name: "Mensaje final"
+      debug:
+        msg: |
+          
+          🎉 ¡DESPLIEGUE COMPLETADO EXITOSAMENTE!
+          ✅ ¡Clúster listo para producción!
